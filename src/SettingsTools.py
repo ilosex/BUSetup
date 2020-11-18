@@ -16,9 +16,20 @@ logger = logging.getLogger(__name__)
 
 agrodroid_path_config = dir_dict.get('BU')
 default_connection_config = ssh_dict.get('default_host')
+
 download_path = pathlib.PurePosixPath(agrodroid_path_config.get('download_path'))
+ssd_mount_point = pathlib.PurePosixPath(agrodroid_path_config.get('ssd_mount_point'))
+versions = pathlib.PurePosixPath(agrodroid_path_config.get('versions'))
+current_version = versions.joinpath('current')
+scripts_path = current_version.joinpath('scripts')
+package_path = current_version.joinpath('package')
+config_path = package_path.joinpath('config')
+navigator_path = current_version.joinpath('navigator')
+
 release_path = pathlib.PureWindowsPath(get_root_path().joinpath('release'))
-script_name = 'NumberChanger.py'
+number_changer = 'NumberChanger.py'
+run_keys_corrector = 'RunKeysCorrector.py'
+
 
 commands_dict = {
     'clocks': 'sudo jetson_clocks --show\n',
@@ -35,8 +46,11 @@ priority_executing = {
     'downgrade_priority': 5,
     'docker_compose': 6,
     'telemetry': 7,
-    'logstash': 8
-}
+    'logstash': 8,
+    'mount_SSD': 9,
+    'add_nets': 10,
+    'add_minversion': 11,
+    }
 
 
 # def have_ping():
@@ -114,7 +128,8 @@ class AgrodroidBU(TerminalSession):
             self.clear_directory_on_bu()
         if 'copy_files' in tasks:
             for file_name in pathlib.Path(release_path).iterdir():
-                self.copy_file_to_bu(release_path.joinpath(file_name))
+                if file_name.is_file():
+                    self.copy_file_to_bu(release_path.joinpath(file_name))
         if 'downgrade_priority' in tasks:
             self.change_connection_priority()
         if 'docker_compose' in tasks or 'telemetry' in tasks:
@@ -130,14 +145,18 @@ class AgrodroidBU(TerminalSession):
             self.install_worker()
             self.check_worker()
             self.delete_file_on_bu(self.logstash_path)
+        if 'mount_SSD' in tasks:
+            self.mount()
+        if 'add_nets' in tasks:
+            self.applies_neural_nets(release_path.joinpath('nets'))
+        if 'add_minversion' in tasks:
+            self.update_min_version()
 
     def set_new_number(self, number):
         self.new_number = number
 
     def reconnect(self):
         self.close_connection()
-        logger.warning('Спим 20 секунд..')
-        time.sleep(20)
         while self.connection_state != f'Connected to {self.host}':
             try:
                 state_request = cmd_command(f'ping {self.host} -n 1')
@@ -197,7 +216,7 @@ class AgrodroidBU(TerminalSession):
             logger.warning('Нет файлов для удаления')
 
     def clear_directory_on_bu(self, directory_path=download_path):
-        dir_contains = self.get_list_files(directory_path)
+        dir_contains = self.get_list_files_on_bu(directory_path)
         self.delete_file_on_bu(dir_contains)
 
     def receive(self, receive_data):
@@ -252,9 +271,10 @@ class AgrodroidBU(TerminalSession):
 
     def change_serial_number(self, new_serial_number):
         self.get_number()
-        script = ExecutableScript(script_name)
+        script = ExecutableScript(number_changer)
         self.copy_file_to_bu(script.script)
-        self.execute_command(f'sudo python3 {download_path.joinpath(script_name)} {self.number} {new_serial_number}\n')
+        self.execute_command(f'sudo python3 {download_path.joinpath(number_changer)} {self.number} {new_serial_number}\n')
+        self.delete_file_on_bu(download_path.joinpath(number_changer))
         self.execute_command('sudo reboot -h now\n')
         logger.warning('Rebooting..')
         time.sleep(60)
@@ -264,17 +284,17 @@ class AgrodroidBU(TerminalSession):
         self.execute_command(f'chmod +x {file_path}\n')
 
     def installer_preparation(self, installer_name):
-        names = find_in_file_list(self.get_list_files(download_path), f'{installer_name}')
+        names = find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
         installer_archive = [name for name in names
                              if not self.ftp.stat(str(download_path.joinpath(name))).st_mode & 0x4000][0]
         self.unarchive_file(download_path.joinpath(installer_archive), download_path)
-        installer_dir = [path for path in find_in_file_list(self.get_list_files(download_path), f'{installer_name}')
+        installer_dir = [path for path in find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
                          if self.ftp.stat(str(download_path.joinpath(path))).st_mode & 0x4000][0]
         installer_dir_path = download_path.joinpath(installer_dir)
         return installer_dir_path
 
     def offline_installer_preparation(self, installer_dir):
-        installer = find_in_file_list(self.get_list_files(installer_dir), 'installer')[0]
+        installer = find_in_file_list(self.get_list_files_on_bu(installer_dir), 'installer')[0]
         installer_path = installer_dir.joinpath(installer)
         self.make_executable(installer_path)
         return installer_path
@@ -290,10 +310,6 @@ class AgrodroidBU(TerminalSession):
         directory = path.parent
         self.execute_command(f'cd {directory}\n')
         self.execute_command(f'./{name}\n1\n2\n')
-        # time.sleep(1)
-        # self.execute_command(f'')
-        # time.sleep(1)
-        # self.execute_command(f'')
 
     def install_logstash_preparation(self, directory):
         names = 'install_worker.sh', 'check_worker.sh'
@@ -314,6 +330,46 @@ class AgrodroidBU(TerminalSession):
                 self.install_worker()
                 self.check_worker()
 
+    def mount(self):
+        commands = [f'echo "dev/sda {ssd_mount_point} auto nosuid,nodev,nofail,x-gvfs-show 0 0" |'
+                    f' sudo tee -a /etc/fstab\n',
+                    f'sudo mount dev/sda {ssd_mount_point}\n',
+                    f'sudo chown -hR agrodroid:agrodroid {ssd_mount_point.parent}\n',
+                    f'cd {ssd_mount_point}\n',
+                    mkdir(' logs data'),
+                    f'cd {ssd_mount_point.joinpath("data")}\n',
+                    mkdir('json images record'),
+                    f'cd {scripts_path}\n',
+                    'python3 install.py\n'
+                    ]
+        [self.execute_command(command) for command in commands]
+
+    def add_neural_net(self, net_name):
+        self.execute_command(f'sudo python3 apply_model.py {net_name.split(".")[0]}\n')
+
+    def applies_neural_nets(self, nets_path):
+        self.execute_command(f'cd {scripts_path}\n')
+        for file_name in self.get_list_files_on_bu(nets_path):
+            self.copy_file_to_bu(nets_path.joinpath(file_name))
+            self.add_neural_net(str(file_name))
+        script = ExecutableScript(run_keys_corrector)
+        self.copy_file_to_bu(script.script)
+        self.execute_command(f'python3 {download_path.joinpath(run_keys_corrector)}\n')
+        self.delete_file_on_bu(str(download_path.joinpath(run_keys_corrector)))
+
+    def update_min_version(self):
+        self.execute_command(f'cd {download_path}\n')
+        files_paths = [file_path for file_path in pathlib.Path(release_path).iterdir() if 'onnx-r' in str(file_path)]
+        logger.info([str(f) for f in files_paths])
+        for file_path in files_paths:
+            file_name = file_path.parts[-1]
+            dir_name = file_name.split(".")[0]
+            self.copy_file_to_bu(file_path)
+            self.unarchive_file(download_path.joinpath(file_name), download_path)
+            self.execute_command(f'mv {download_path.joinpath(dir_name)} {versions}\n')
+            self.execute_command(f'rm {current_version}\n')
+            self.execute_command(f'ln -s {dir_name} {current_version}\n')
+
     def get_number(self):
         self.number = self.exec_command('hostname')[1].readlines()[0].strip()
         return self.number
@@ -332,6 +388,6 @@ class AgrodroidBU(TerminalSession):
     def exist_file_checker(self, file_path):
         pathlib.Path(file_path).exists()
 
-    def get_list_files(self, directory_path=download_path):
+    def get_list_files_on_bu(self, directory_path=download_path):
         files = self.ftp.listdir(str(directory_path))
         return files
