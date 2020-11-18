@@ -50,6 +50,8 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
         self.install_docker_compose_box = self.ui.checkBox_5
         self.install_telemetry_box = self.ui.checkBox_6
         self.install_logstash_box = self.ui.checkBox_8
+        self.mount_SSD_box = self.ui.checkBox_9
+        self.add_nets_box = self.ui.checkBox_10
 
         self.log_window = self.ui.textEdit
 
@@ -79,6 +81,8 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
         self.install_docker_compose_box.stateChanged.connect(self.inst_docker_compose)
         self.install_telemetry_box.stateChanged.connect(self.inst_telemetry)
         self.install_logstash_box.stateChanged.connect(self.inst_logstash)
+        self.mount_SSD_box.stateChanged.connect(self.mount_SSD)
+        self.add_nets_box.stateChanged.connect(self.add_nets)
 
         self.stream_handler.setLevel(logging.DEBUG)
         self.stream_handler.setFormatter(FORMATTER)
@@ -189,6 +193,13 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
 
     def inst_logstash(self):
         self.box_checked(self.install_logstash_box, 'logstash', 'установку logstash')
+
+    def mount_SSD(self):
+        self.box_checked(self.mount_SSD_box, 'mount_SSD',
+                         'монтирование SSD и развертывание на нем инфраструктуры папок')
+
+    def add_nets(self):
+        self.box_checked(self.add_nets_box, 'add_nets', 'добавление нейронных сетей')
 
 
 if __name__ == '__main__':
