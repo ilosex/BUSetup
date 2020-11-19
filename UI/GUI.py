@@ -1,4 +1,5 @@
 import logging
+import pathlib
 import sys
 import time
 from datetime import date
@@ -6,6 +7,7 @@ from logging.handlers import TimedRotatingFileHandler
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QFileDialog
 
 from UI.gui_main import Ui_MainWindow
 from src import SettingsTools, MyLogger, FileOperator
@@ -35,6 +37,7 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
 
     def __init__(self):
         super().__init__()
+        self.file_handler = get_file_handler()
         self.logger = logging.getLogger(__name__)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -66,11 +69,13 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
         btn_disconnect = self.ui.pushButton
         btn_get_number = self.ui.pushButton_3
         btn_execute = self.ui.pushButton_5
+        btn_chose_directory = self.ui.pushButton_14
 
         btn_connect.clicked.connect(self.connect_clicked)
         btn_disconnect.clicked.connect(self.disconnect_clicked)
         btn_get_number.clicked.connect(self.get_number_clicked)
         btn_execute.clicked.connect(self.execute_clicked)
+        btn_chose_directory.clicked.connect(self.chose_directory_clicked)
 
         self.ip_address.setText(self.host)
         self.number_field.setText('')
@@ -94,7 +99,6 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
         self.logger.addHandler(self.stream_handler)
         self.log_window.setReadOnly(True)
 
-        self.file_handler = get_file_handler()
         self.file_handler.setLevel(logging.DEBUG)
         self.file_handler.setFormatter(FORMATTER)
         self.logger.addHandler(self.stream_handler)
@@ -156,6 +160,16 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
         else:
             self.logger.error('Не выбрано ни одного задания!')
 
+    def chose_directory_clicked(self):
+        choice = QFileDialog.getExistingDirectory(self, 'Выбор папки с прошивками', str(SettingsTools.get_root_path()))
+        SettingsTools.release_path = pathlib.Path(choice)
+        self.logger.info(f'Папка {choice} выбрана как источник прошивок')
+        # f = open(choice, 'r')
+
+        # with f:
+        #     data = f.read()
+        #     self.textEdit.setText(data)
+
     def box_checked(self, box, task_name_en, task_name_ru):
         if box.isChecked():
             self.tasks.add(task_name_en)
@@ -210,8 +224,17 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
         self.box_checked(self.add_minversion_box, 'add_minversion', 'добавление мин.версии')
 
     def checked_all(self):
-        # todo реализовать
-        pass
+        self.change_number_box.setCheckState(self.checked_all_box.isChecked())
+        self.check_Jackson_clocks_box.setCheckState(self.checked_all_box.isChecked())
+        self.copy_files_box.setCheckState(self.checked_all_box.isChecked())
+        self.delete_files_box.setCheckState(self.checked_all_box.isChecked())
+        self.downgrade_wire_net_priority_box.setCheckState(self.checked_all_box.isChecked())
+        self.install_docker_compose_box.setCheckState(self.checked_all_box.isChecked())
+        self.install_telemetry_box.setCheckState(self.checked_all_box.isChecked())
+        self.install_logstash_box.setCheckState(self.checked_all_box.isChecked())
+        self.mount_SSD_box.setCheckState(self.checked_all_box.isChecked())
+        self.add_nets_box.setCheckState(self.checked_all_box.isChecked())
+        self.add_minversion_box.setCheckState(self.checked_all_box.isChecked())
 
 
 if __name__ == '__main__':

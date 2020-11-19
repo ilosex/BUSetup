@@ -26,10 +26,9 @@ package_path = current_version.joinpath('package')
 config_path = package_path.joinpath('config')
 navigator_path = current_version.joinpath('navigator')
 
-release_path = pathlib.PureWindowsPath(get_root_path().joinpath('release'))
+release_path = pathlib.Path(get_root_path().joinpath('release'))
 number_changer = 'NumberChanger.py'
 run_keys_corrector = 'RunKeysCorrector.py'
-
 
 commands_dict = {
     'clocks': 'sudo jetson_clocks --show\n',
@@ -50,7 +49,7 @@ priority_executing = {
     'mount_SSD': 9,
     'add_nets': 10,
     'add_minversion': 11,
-    }
+}
 
 
 # def have_ping():
@@ -273,7 +272,8 @@ class AgrodroidBU(TerminalSession):
         self.get_number()
         script = ExecutableScript(number_changer)
         self.copy_file_to_bu(script.script)
-        self.execute_command(f'sudo python3 {download_path.joinpath(number_changer)} {self.number} {new_serial_number}\n')
+        self.execute_command(
+            f'sudo python3 {download_path.joinpath(number_changer)} {self.number} {new_serial_number}\n')
         self.delete_file_on_bu(download_path.joinpath(number_changer))
         self.execute_command('sudo reboot -h now\n')
         logger.warning('Rebooting..')
@@ -288,8 +288,9 @@ class AgrodroidBU(TerminalSession):
         installer_archive = [name for name in names
                              if not self.ftp.stat(str(download_path.joinpath(name))).st_mode & 0x4000][0]
         self.unarchive_file(download_path.joinpath(installer_archive), download_path)
-        installer_dir = [path for path in find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
-                         if self.ftp.stat(str(download_path.joinpath(path))).st_mode & 0x4000][0]
+        installer_dir = \
+        [path for path in find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
+         if self.ftp.stat(str(download_path.joinpath(path))).st_mode & 0x4000][0]
         installer_dir_path = download_path.joinpath(installer_dir)
         return installer_dir_path
 
@@ -360,7 +361,6 @@ class AgrodroidBU(TerminalSession):
     def update_min_version(self):
         self.execute_command(f'cd {download_path}\n')
         files_paths = [file_path for file_path in pathlib.Path(release_path).iterdir() if 'onnx-r' in str(file_path)]
-        logger.info([str(f) for f in files_paths])
         for file_path in files_paths:
             file_name = file_path.parts[-1]
             dir_name = file_name.split(".")[0]
