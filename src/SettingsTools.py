@@ -6,16 +6,24 @@ import time
 from datetime import datetime
 from functools import wraps, reduce
 
-from src.FileOperator import YAMLFile, ExecutableScript, get_root_path
 from src.terminal_session import TerminalSession
-
-ssh_dict = YAMLFile('SSHconfig.yaml').read_from_the_file()
-dir_dict = YAMLFile('Directory.yaml').read_from_the_file()
 
 logger = logging.getLogger(__name__)
 
-agrodroid_path_config = dir_dict.get('BU')
-default_connection_config = ssh_dict.get('default_host')
+root_path = pathlib.Path(__file__).parent.parent
+agrodroid_path_config = {
+    'download_path': '/home/agrodroid/app/downloads/',
+    'hosts_path': '/ets/hosts',
+    'hostname_path': '/ets/hostname',
+    'ssd_mount_point': '/media/agrodroid/files',
+    'versions': '/home/agrodroid/app/versions/'
+}
+default_connection_config = {
+    'host': '192.168.10.208',
+    'port': 22,
+    'user': 'agrodroid',
+    'secret': 'agrodroid'
+}
 
 download_path = pathlib.PurePosixPath(agrodroid_path_config.get('download_path'))
 ssd_mount_point = pathlib.PurePosixPath(agrodroid_path_config.get('ssd_mount_point'))
@@ -26,7 +34,7 @@ package_path = current_version.joinpath('package')
 config_path = package_path.joinpath('config')
 navigator_path = current_version.joinpath('navigator')
 
-release_path = pathlib.Path(get_root_path().joinpath('release'))
+release_path = pathlib.Path(root_path.joinpath('release'))
 number_changer = 'NumberChanger.py'
 run_keys_corrector = 'RunKeysCorrector.py'
 
@@ -50,6 +58,57 @@ priority_executing = {
     'add_nets': 10,
     'add_minversion': 11,
 }
+
+NumberChanger = '''import fileinput
+import sys
+from pathlib import PurePosixPath, PureWindowsPath
+
+
+class EditingFile:
+    def __init__(self, file_path, os='linux'):
+        self.path = PurePosixPath(file_path) if os == 'linux' else PureWindowsPath(file_path)
+
+    def edit_file(self, old_text, new_text):
+        for line in fileinput.FileInput(str(self.path), inplace=1):
+            line = line.replace(old_text, new_text)
+            print(line, end='')
+
+    def read_file(self):
+        with open(self.path, 'r') as f:
+            return [l for l in f.readlines()]
+
+
+if __name__ == '__main__':
+    if len(sys.argv) == 3:
+        old = sys.argv[1]
+        print(f'Old number: {old}')
+        new = sys.argv[2]
+        print(f'New number: {new}')
+    else:
+        print('Check args!')
+        sys.exit(1)
+    FILES_DIRECTORY = PurePosixPath('/etc/')
+    files = ('hosts', 'hostname')
+    for file_name in files:
+        file = EditingFile(FILES_DIRECTORY.joinpath(file_name))
+        file.edit_file(old_text=old, new_text=new)
+        lines = file.read_file()
+        print(lines[0].strip()) if file_name == 'hostname' else print(lines[1].strip())
+'''
+
+RunKeysCorrector = '''import fileinput
+from pathlib import PurePosixPath
+
+if __name__ == '__main__':
+    RUN_KEYS = PurePosixPath('/home/agrodroid/app/versions/current/package/config/navigator/run_keys.txt')
+    for line in fileinput.FileInput(str(RUN_KEYS), inplace=1):
+        if 'consoleMode ' in line:
+            line = line.replace('true ', 'false')
+        else:
+            line = line
+        print(line, end='')
+'''
+
 
 
 # def have_ping():
@@ -270,11 +329,13 @@ class AgrodroidBU(TerminalSession):
 
     def change_serial_number(self, new_serial_number):
         self.get_number()
-        script = ExecutableScript(number_changer)
-        self.copy_file_to_bu(script.script)
+        path = pathlib.Path(number_changer)
+        pathlib.Path.touch(path)
+        path.write_text(NumberChanger)
+        self.copy_file_to_bu(path)
         self.execute_command(
             f'sudo python3 {download_path.joinpath(number_changer)} {self.number} {new_serial_number}\n')
-        self.delete_file_on_bu(download_path.joinpath(number_changer))
+        self.delete_file_on_bu(path)
         self.execute_command('sudo reboot -h now\n')
         logger.warning('Rebooting..')
         time.sleep(60)
@@ -288,9 +349,9 @@ class AgrodroidBU(TerminalSession):
         installer_archive = [name for name in names
                              if not self.ftp.stat(str(download_path.joinpath(name))).st_mode & 0x4000][0]
         self.unarchive_file(download_path.joinpath(installer_archive), download_path)
-        installer_dir = \
-        [path for path in find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
-         if self.ftp.stat(str(download_path.joinpath(path))).st_mode & 0x4000][0]
+        installer_dir = [path for path
+                         in find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
+                         if self.ftp.stat(str(download_path.joinpath(path))).st_mode & 0x4000][0]
         installer_dir_path = download_path.joinpath(installer_dir)
         return installer_dir_path
 
@@ -353,8 +414,8 @@ class AgrodroidBU(TerminalSession):
         for file_name in self.get_list_files_on_bu(nets_path):
             self.copy_file_to_bu(nets_path.joinpath(file_name))
             self.add_neural_net(str(file_name))
-        script = ExecutableScript(run_keys_corrector)
-        self.copy_file_to_bu(script.script)
+        script_path = scripts_path.joinpath(run_keys_corrector)
+        self.copy_file_to_bu(script_path)
         self.execute_command(f'python3 {download_path.joinpath(run_keys_corrector)}\n')
         self.delete_file_on_bu(str(download_path.joinpath(run_keys_corrector)))
 

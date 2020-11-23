@@ -1,11 +1,15 @@
 import logging
 import time
-
 import paramiko
 
-from src.FileOperator import YAMLFile
 
 logger = logging.getLogger(__name__)
+default_connection_config = {
+    'host': '192.168.10.208',
+    'port': 22,
+    'user': 'agrodroid',
+    'secret': 'agrodroid'
+}
 
 
 class TerminalSession(paramiko.SSHClient):
@@ -14,12 +18,12 @@ class TerminalSession(paramiko.SSHClient):
     host = ''
     port = None
     timeout = None
-    yaml_file = YAMLFile('SSHconfig.yaml')
-    yaml_dict = yaml_file.read_from_the_file()
-    default_connection_config = yaml_dict.get('default_host')
+
 
     def __init__(self, connection_parameters=default_connection_config):
         super().__init__()
+        if connection_parameters is None:
+            connection_parameters = default_connection_config
         self.host = connection_parameters.get("host")
         self.port = connection_parameters.get("port")
         self.user = connection_parameters.get("user")
@@ -67,10 +71,6 @@ class TerminalSession(paramiko.SSHClient):
         self.channel.close()
         self.connection_state = self.ftp_state = 'Not connected'
         logger.info(f'Connection to {self.host} closed')
-
-    # def reconnect(self):
-    #     self.close_connection()
-    #     self.get_connections()
 
 
 if __name__ == '__main__':
