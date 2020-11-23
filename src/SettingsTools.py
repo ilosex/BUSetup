@@ -203,12 +203,14 @@ class AgrodroidBU(TerminalSession):
             self.install_worker()
             self.check_worker()
             self.delete_file_on_bu(self.logstash_path)
-        if 'mount_SSD' in tasks:
-            self.mount()
-        if 'add_nets' in tasks:
-            self.applies_neural_nets(release_path.joinpath('nets'))
-        if 'add_minversion' in tasks:
-            self.update_min_version()
+        if 'mount_SSD' in tasks or 'add_nets' in tasks or 'add_minversion' in tasks:
+            self.autostart()
+            if 'mount_SSD' in tasks:
+                self.mount()
+            if 'add_nets' in tasks:
+                self.applies_neural_nets(release_path.joinpath('nets'))
+            if 'add_minversion' in tasks:
+                self.update_min_version()
 
     def set_new_number(self, number):
         self.new_number = number
@@ -335,7 +337,7 @@ class AgrodroidBU(TerminalSession):
         self.copy_file_to_bu(path)
         self.execute_command(
             f'sudo python3 {download_path.joinpath(number_changer)} {self.number} {new_serial_number}\n')
-        self.delete_file_on_bu(path)
+        self.delete_file_on_bu(path) # todo: Полечить "Нет файлов для удаления"
         self.execute_command('sudo reboot -h now\n')
         logger.warning('Rebooting..')
         time.sleep(60)
@@ -392,6 +394,10 @@ class AgrodroidBU(TerminalSession):
                 self.install_worker()
                 self.check_worker()
 
+    def autostart(self):
+        self.execute_command(f'cd {current_version}\n')
+        self.execute_command('./autostart.sh\n')
+
     def mount(self):
         commands = [f'echo "dev/sda {ssd_mount_point} auto nosuid,nodev,nofail,x-gvfs-show 0 0" |'
                     f' sudo tee -a /etc/fstab\n',
@@ -411,11 +417,15 @@ class AgrodroidBU(TerminalSession):
 
     def applies_neural_nets(self, nets_path):
         self.execute_command(f'cd {scripts_path}\n')
-        for file_name in self.get_list_files_on_bu(nets_path):
-            self.copy_file_to_bu(nets_path.joinpath(file_name))
-            self.add_neural_net(str(file_name))
-        script_path = scripts_path.joinpath(run_keys_corrector)
-        self.copy_file_to_bu(script_path)
+        for file_path in nets_path.iterdir():
+            self.copy_file_to_bu(nets_path.joinpath(file_path))
+            self.add_neural_net(str(file_path.name))
+        # script_path = scripts_path.joinpath(run_keys_corrector)
+        # self.copy_file_to_bu(script_path)
+        path = pathlib.Path(run_keys_corrector)
+        pathlib.Path.touch(path)
+        path.write_text(RunKeysCorrector)
+        self.copy_file_to_bu(path)
         self.execute_command(f'python3 {download_path.joinpath(run_keys_corrector)}\n')
         self.delete_file_on_bu(str(download_path.joinpath(run_keys_corrector)))
 
