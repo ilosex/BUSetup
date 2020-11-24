@@ -110,7 +110,6 @@ if __name__ == '__main__':
 '''
 
 
-
 # def have_ping():
 #     return 'ms' in droid.execute_command(st.ping_dns())
 
@@ -204,7 +203,9 @@ class AgrodroidBU(TerminalSession):
             self.check_worker()
             self.delete_file_on_bu(self.logstash_path)
         if 'mount_SSD' in tasks or 'add_nets' in tasks or 'add_minversion' in tasks:
-            self.autostart()
+            rec = self.execute_command('pip3 freeze | grep cgn\n')
+            if not sum('==' in string for string in rec):
+                self.autostart()
             if 'mount_SSD' in tasks:
                 self.mount()
             if 'add_nets' in tasks:
@@ -337,7 +338,7 @@ class AgrodroidBU(TerminalSession):
         self.copy_file_to_bu(path)
         self.execute_command(
             f'sudo python3 {download_path.joinpath(number_changer)} {self.number} {new_serial_number}\n')
-        self.delete_file_on_bu(path) # todo: Полечить "Нет файлов для удаления"
+        self.delete_file_on_bu(str(download_path.joinpath(number_changer)))
         self.execute_command('sudo reboot -h now\n')
         logger.warning('Rebooting..')
         time.sleep(60)
@@ -412,16 +413,14 @@ class AgrodroidBU(TerminalSession):
                     ]
         [self.execute_command(command) for command in commands]
 
-    def add_neural_net(self, net_name):
-        self.execute_command(f'sudo python3 apply_model.py {net_name.split(".")[0]}\n')
+    def add_neural_net(self, net_name): #todo: реализовать выбор файлов bisenet
+        self.execute_command(f'python3 apply_model.py {net_name.split(".")[0]}\n')
 
     def applies_neural_nets(self, nets_path):
         self.execute_command(f'cd {scripts_path}\n')
         for file_path in nets_path.iterdir():
             self.copy_file_to_bu(nets_path.joinpath(file_path))
             self.add_neural_net(str(file_path.name))
-        # script_path = scripts_path.joinpath(run_keys_corrector)
-        # self.copy_file_to_bu(script_path)
         path = pathlib.Path(run_keys_corrector)
         pathlib.Path.touch(path)
         path.write_text(RunKeysCorrector)

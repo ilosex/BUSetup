@@ -20,6 +20,7 @@ local_path = SettingsTools.root_path.joinpath('release')
 FORMATTER = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
 
+# todo: Организовать запись лога в файл
 # def get_file_handler():
 #     file_handler = TimedRotatingFileHandler(get_file(), when='midnight')
 #     file_handler.setFormatter(FORMATTER)
@@ -150,7 +151,7 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
         else:
             self.logger.error('Стоит галка изменения номера блока!')
 
-    def execute_clicked(self):
+    def execute_clicked(self): #todo: выполнить проверку на выбор папки с прошивками
         if len(self.tasks) > 0:
             self.set_new_number(self.number_field.text())
             if self.connection_state != f'Connected to {self.host}':
