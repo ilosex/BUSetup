@@ -202,16 +202,16 @@ class AgrodroidBU(TerminalSession):
             self.install_worker()
             self.check_worker()
             self.delete_file_on_bu(self.logstash_path)
-        if 'mount_SSD' in tasks or 'add_nets' in tasks or 'add_minversion' in tasks:
+        if 'add_minversion' in tasks:
+            self.update_min_version()
+        if 'mount_SSD' in tasks or 'add_nets' in tasks:
             rec = self.execute_command('pip3 freeze | grep cgn\n')
             if not sum('==' in string for string in rec):
-                self.autostart()
+                self.execute_command(f'pip3 install {current_version.joinpath("docker/main/cgn-*.whl")}\n')
             if 'mount_SSD' in tasks:
                 self.mount()
             if 'add_nets' in tasks:
                 self.applies_neural_nets(release_path.joinpath('nets'))
-            if 'add_minversion' in tasks:
-                self.update_min_version()
 
     def set_new_number(self, number):
         self.new_number = number
@@ -336,9 +336,13 @@ class AgrodroidBU(TerminalSession):
         pathlib.Path.touch(path)
         path.write_text(NumberChanger)
         self.copy_file_to_bu(path)
+        path.unlink()
         self.execute_command(
             f'sudo python3 {download_path.joinpath(number_changer)} {self.number} {new_serial_number}\n')
         self.delete_file_on_bu(str(download_path.joinpath(number_changer)))
+        self.reboot()
+
+    def reboot(self):
         self.execute_command('sudo reboot -h now\n')
         logger.warning('Rebooting..')
         time.sleep(60)
@@ -400,18 +404,37 @@ class AgrodroidBU(TerminalSession):
         self.execute_command('./autostart.sh\n')
 
     def mount(self):
-        commands = [f'echo "dev/sda {ssd_mount_point} auto nosuid,nodev,nofail,x-gvfs-show 0 0" |'
-                    f' sudo tee -a /etc/fstab\n',
-                    f'sudo mount dev/sda {ssd_mount_point}\n',
+
+        def get_uuid():
+            ssd_uuid = ''
+            for string in self.execute_command(f'sudo blkid | grep sda\n'):
+                for part in string.split():
+                    if 'UUID' in part:
+                        ssd_uuid = part
+            return ssd_uuid[6:-1]
+
+        self.execute_command(f'sudo mkfs -t ext4 -L files /dev/sda\ny\n')
+        ssd_uuid_number = get_uuid()
+        logger.info(ssd_uuid_number)
+        uuid_in_fstab = 0
+        for string in self.execute_command(f'cat /etc/fstab\n'):
+            uuid_in_fstab += sum(ssd_uuid_number in part for part in string.split())
+        if uuid_in_fstab == 0:
+            self.execute_command(f'echo "UUID={ssd_uuid_number} {ssd_mount_point} ext4 '
+                                 f'nosuid,nodev,nofail,x-gvfs-show 0 0" | sudo tee -a /etc/fstab\n')
+        commands = [
+                    f'sudo mount -v --uuid="{ssd_uuid_number}" {ssd_mount_point}\n',
                     f'sudo chown -hR agrodroid:agrodroid {ssd_mount_point.parent}\n',
                     f'cd {ssd_mount_point}\n',
-                    mkdir(' logs data'),
+                    mkdir('logs data'),
                     f'cd {ssd_mount_point.joinpath("data")}\n',
                     mkdir('json images record'),
                     f'cd {scripts_path}\n',
                     'python3 install.py\n'
                     ]
         [self.execute_command(command) for command in commands]
+        self.reboot()
+        # logger.info(ssd_uuid_number)
 
     def add_neural_net(self, net_name): #todo: реализовать выбор файлов bisenet
         self.execute_command(f'python3 apply_model.py {net_name.split(".")[0]}\n')
@@ -425,6 +448,7 @@ class AgrodroidBU(TerminalSession):
         pathlib.Path.touch(path)
         path.write_text(RunKeysCorrector)
         self.copy_file_to_bu(path)
+        path.unlink()
         self.execute_command(f'python3 {download_path.joinpath(run_keys_corrector)}\n')
         self.delete_file_on_bu(str(download_path.joinpath(run_keys_corrector)))
 
