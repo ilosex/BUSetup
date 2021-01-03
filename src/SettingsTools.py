@@ -38,6 +38,11 @@ release_path = pathlib.Path(root_path.joinpath('release'))
 number_changer = 'NumberChanger.py'
 run_keys_corrector = 'RunKeysCorrector.py'
 
+min_versions = list()
+bisenets = list()
+logstashs = list()
+offline_installers = list()
+
 commands_dict = {
     'clocks': 'sudo jetson_clocks --show\n',
     'ping': 'ping 8.8.8.8\n',
@@ -114,8 +119,8 @@ if __name__ == '__main__':
 #     return 'ms' in droid.execute_command(st.ping_dns())
 
 
-def get_sorted_tasks(tasks):
-    return sorted(tasks, key=lambda a: priority_executing[a])
+# def get_sorted_tasks(tasks):
+#     return sorted(tasks, key=lambda a: priority_executing[a])
 
 
 def cmd_command(command):
@@ -162,8 +167,30 @@ def make_list_flat(list_strings):
     if len(list_strings) > 1:
         while type(list_strings[0]) is not (str or None):
             list_strings = reduce(lambda x, y: extend_and_return(x, y), list_strings)
-
     return list_strings
+
+
+def parsing_firmware(path_dir):
+    for path in path_dir.iterdir():
+        if path.is_dir():
+            parsing_firmware(path)
+
+        elif 'offline' in str(path):
+            offline_installers.append(path)
+        elif 'logstash' in str(path):
+            logstashs.append(path)
+        elif 'bisenet' in str(path):
+            bisenets.append(path)
+        elif 'onnx' in str(path):
+            min_versions.append(path)
+        else:
+            logger.info(f'Парсер прошивок не смог причислить файл {path.name} ни к одной из категорий')
+    logger.info(f'Найдены:\n'
+                f' Минверсии: {[p.name for p in min_versions]}\n'
+                f' Оффлайнинсталлеры: {[p.name for p in offline_installers]}\n'
+                f' Логстэши: {[p.name for p in logstashs]}\n'
+                f' Нейронные сети: {[p.name for p in bisenets]}')
+    return len(min_versions) * len(offline_installers) * len(logstashs) * len(bisenets) != 0
 
 
 class AgrodroidBU(TerminalSession):
@@ -177,6 +204,7 @@ class AgrodroidBU(TerminalSession):
         self.new_number = None
 
     def execute_tasks(self, tasks):
+        logger.info(f'Найдено все необходимое для прошивки: {parsing_firmware(release_path)}')
         if 'change_serial_number' in tasks:
             self.change_serial_number(self.new_number)
         if 'check_jackson_clocks' in tasks:
