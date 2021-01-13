@@ -211,7 +211,6 @@ class UI(QtWidgets.QMainWindow, SettingsTools.AgrodroidBU):
         self.box_checked(self.install_logstash_box, 'logstash', 'установку logstash')
 
     def mount_SSD(self):
-        # todo проверить
         self.box_checked(self.mount_SSD_box, 'mount_SSD',
                          'монтирование SSD и развертывание на нем инфраструктуры папок')
 

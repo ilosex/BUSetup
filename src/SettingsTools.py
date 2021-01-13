@@ -1,10 +1,6 @@
 import logging
 import pathlib
-import re
-import subprocess
 import time
-from datetime import datetime
-from functools import wraps, reduce
 
 from src.terminal_session import TerminalSession
 
@@ -123,58 +119,10 @@ if __name__ == '__main__':
 #     return sorted(tasks, key=lambda a: priority_executing[a])
 
 
-def cmd_command(command):
-    returned_output = subprocess.check_output(command).decode('cp866').split('\r\n')[2]
-    logger.info(returned_output)
-    return returned_output
-
-
-def with_connection():
-    def inner(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            if args[0].connection_state == 'Not connected':
-                args[0].get_connections()
-            return f(*args, **kwargs)
-
-        return wrapper
-
-    return inner
-
-
-def mkdir(directory):
-    return f'mkdir --mode=777 {directory}\n'
-
-
-def find_in_file_list(list_name, find_string):
-    return [name for name in list_name if find_string in name]
-
-
-def unzip_file(archive_path, unarchive_path):
-    return f'unzip {str(archive_path)} -d {str(unarchive_path)}/\n'
-
-
-def untar_file(archive_path, unarchive_path):
-    return f'tar -C {str(unarchive_path)} -xvf {str(archive_path)}\n'
-
-
-def make_list_flat(list_strings):
-    def extend_and_return(x, y):
-        x.extend(y)
-        return x
-
-    list_strings = [string for string in list_strings if string != '']
-    if len(list_strings) > 1:
-        while type(list_strings[0]) is not (str or None):
-            list_strings = reduce(lambda x, y: extend_and_return(x, y), list_strings)
-    return list_strings
-
-
 def parsing_firmware(path_dir):
     for path in path_dir.iterdir():
         if path.is_dir():
             parsing_firmware(path)
-
         elif 'offline' in str(path):
             offline_installers.append(path)
         elif 'logstash' in str(path):
@@ -202,6 +150,26 @@ class AgrodroidBU(TerminalSession):
         super().__init__(connection_parameters=connection_param)
         self.number = None
         self.new_number = None
+
+    @staticmethod
+    def unzip_file(archive_path, unarchive_path):
+        return f'unzip {str(archive_path)} -d {str(unarchive_path)}/\n'
+
+    @staticmethod
+    def untar_file(archive_path, unarchive_path):
+        return f'tar -C {str(unarchive_path)} -xvf {str(archive_path)}\n'
+
+    @staticmethod
+    def find_in_file_list(list_name, find_string):
+        return [name for name in list_name if find_string in name]
+
+    @staticmethod
+    def mkdir(directory):
+        return f'mkdir --mode=777 {directory}\n'
+
+    @staticmethod
+    def exist_file_checker(file_path):
+        pathlib.Path(file_path).exists()
 
     def execute_tasks(self, tasks):
         logger.info(f'Найдено все необходимое для прошивки: {parsing_firmware(release_path)}')
@@ -241,25 +209,17 @@ class AgrodroidBU(TerminalSession):
             if 'add_nets' in tasks:
                 self.applies_neural_nets(release_path.joinpath('nets'))
 
+    def reboot(self):
+        self.execute_command('sudo reboot -h now\n')
+        logger.warning('Rebooting..')
+        time.sleep(60)
+        self.reconnect()
+
+    def make_executable(self, file_path):
+        self.execute_command(f'chmod +x {file_path}\n')
+
     def set_new_number(self, number):
         self.new_number = number
-
-    def reconnect(self):
-        self.close_connection()
-        while self.connection_state != f'Connected to {self.host}':
-            try:
-                state_request = cmd_command(f'ping {self.host} -n 1')
-                while not ('TTL' in state_request):
-                    try:
-                        state_request = cmd_command(f'ping {self.host} -n 1')
-                    except OSError:
-                        logger.error('~Нет связи~')
-                    time.sleep(2)
-                else:
-                    logger.info('Подключаемся..')
-                    self.get_connections()
-            except BaseException:
-                logger.error('~Нет связи~')
 
     def copy_file_to_bu(self, files_paths, remote_path=download_path):
         def copy(local):
@@ -273,7 +233,7 @@ class AgrodroidBU(TerminalSession):
         if is_directory:
             dir_name = files_paths.parts[-1]
             dir_path = remote_path.joinpath(dir_name)
-            self.execute_command(mkdir(dir_path))
+            self.execute_command(AgrodroidBU.mkdir(dir_path))
             for file_name in pathlib.Path(files_paths).iterdir():
                 self.copy_file_to_bu(files_paths.joinpath(file_name), dir_path)
         elif it_is_file:
@@ -308,56 +268,6 @@ class AgrodroidBU(TerminalSession):
         dir_contains = self.get_list_files_on_bu(directory_path)
         self.delete_file_on_bu(dir_contains)
 
-    def receive(self, receive_data):
-        time.sleep(1)
-        lines = receive_data.decode('utf-8').split('\r\n')
-        for line in lines:
-            logger.info(line)
-        return lines
-
-    def execute_command(self, command):
-
-        def end_task(string_list):
-            string_list = make_list_flat(string_list)
-            if string_list is None or string_list == [None]:
-                return False
-            if len(string_list) > 1 and type(string_list[0]) is not (str or None):
-                strings = [string.split() for string in string_list]
-                strings = make_list_flat(strings)
-            else:
-                strings = string_list
-            end_of_task = True in ('agrodroid' in re.split('0m|@', string)
-                                   for string in strings if type(string) is str)
-            return end_of_task
-
-        def wait_answer(strings):
-            start_waiting = datetime.now()
-            end = end_task(strings)
-            while not end:
-                r = self.receive(self.channel.recv(10e10))
-                time.sleep(1)
-                recv = have_password(r)
-                end = end_task(recv)
-                strings.extend(recv)
-                if 'reboot' in command:
-                    return strings
-            logger.info(f'Время исполнения команды: {str(datetime.now() - start_waiting)}')
-            return strings
-
-        def have_password(strings):
-            recv = strings
-            for line in strings:
-                if 'password' in line.split():
-                    self.channel.send(f'{self.secret}\n')
-                    time.sleep(1)
-                    strings = self.receive(self.channel.recv(10e10))
-                    recv.extend(strings)
-            return recv
-
-        self.channel.send(command)
-        time.sleep(2)
-        return wait_answer(have_password(self.receive(self.channel.recv(10e10))[1:]))
-
     def change_serial_number(self, new_serial_number):
         self.get_number()
         path = pathlib.Path(number_changer)
@@ -370,28 +280,19 @@ class AgrodroidBU(TerminalSession):
         self.delete_file_on_bu(str(download_path.joinpath(number_changer)))
         self.reboot()
 
-    def reboot(self):
-        self.execute_command('sudo reboot -h now\n')
-        logger.warning('Rebooting..')
-        time.sleep(60)
-        self.reconnect()
-
-    def make_executable(self, file_path):
-        self.execute_command(f'chmod +x {file_path}\n')
-
     def installer_preparation(self, installer_name):
-        names = find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
+        names = AgrodroidBU.find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
         installer_archive = [name for name in names
                              if not self.ftp.stat(str(download_path.joinpath(name))).st_mode & 0x4000][0]
         self.unarchive_file(download_path.joinpath(installer_archive), download_path)
         installer_dir = [path for path
-                         in find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
+                         in AgrodroidBU.find_in_file_list(self.get_list_files_on_bu(download_path), f'{installer_name}')
                          if self.ftp.stat(str(download_path.joinpath(path))).st_mode & 0x4000][0]
         installer_dir_path = download_path.joinpath(installer_dir)
         return installer_dir_path
 
     def offline_installer_preparation(self, installer_dir):
-        installer = find_in_file_list(self.get_list_files_on_bu(installer_dir), 'installer')[0]
+        installer = AgrodroidBU.find_in_file_list(self.get_list_files_on_bu(installer_dir), 'installer')[0]
         installer_path = installer_dir.joinpath(installer)
         self.make_executable(installer_path)
         return installer_path
@@ -422,7 +323,7 @@ class AgrodroidBU(TerminalSession):
 
     def check_worker(self):
         strings = self.execute_command('./check_worker.sh\n')
-        for string in make_list_flat(strings):
+        for string in TerminalSession.make_list_flat(strings):
             if '- fail' in string.lower().split():
                 self.install_worker()
                 self.check_worker()
@@ -435,8 +336,8 @@ class AgrodroidBU(TerminalSession):
 
         def get_uuid():
             ssd_uuid = ''
-            for string in self.execute_command(f'sudo blkid | grep sda\n'):
-                for part in string.split():
+            for line in self.execute_command(f'sudo blkid | grep sda\n'):
+                for part in line.split():
                     if 'UUID' in part:
                         ssd_uuid = part
             return ssd_uuid[6:-1]
@@ -454,17 +355,16 @@ class AgrodroidBU(TerminalSession):
                     f'sudo mount -v --uuid="{ssd_uuid_number}" {ssd_mount_point}\n',
                     f'sudo chown -hR agrodroid:agrodroid {ssd_mount_point.parent}\n',
                     f'cd {ssd_mount_point}\n',
-                    mkdir('logs data'),
+                    AgrodroidBU.mkdir('logs data'),
                     f'cd {ssd_mount_point.joinpath("data")}\n',
-                    mkdir('json images record'),
+                    AgrodroidBU.mkdir('json images record'),
                     f'cd {scripts_path}\n',
                     'python3 install.py\n'
                     ]
         [self.execute_command(command) for command in commands]
         self.reboot()
-        # logger.info(ssd_uuid_number)
 
-    def add_neural_net(self, net_name): #todo: реализовать выбор файлов bisenet
+    def add_neural_net(self, net_name):
         self.execute_command(f'python3 apply_model.py {net_name.split(".")[0]}\n')
 
     def applies_neural_nets(self, nets_path):
@@ -504,12 +404,8 @@ class AgrodroidBU(TerminalSession):
 
     def unarchive_file(self, archive_path, unarchive_path):
         name = archive_path.parts[-1]
-        self.execute_command(untar_file(archive_path, unarchive_path) if 'tar' in name.split('.')
-                             else unzip_file(archive_path, unarchive_path))
-
-    def exist_file_checker(self, file_path):
-        pathlib.Path(file_path).exists()
+        self.execute_command(AgrodroidBU.untar_file(archive_path, unarchive_path) if 'tar' in name.split('.')
+                             else AgrodroidBU.unzip_file(archive_path, unarchive_path))
 
     def get_list_files_on_bu(self, directory_path=download_path):
-        files = self.ftp.listdir(str(directory_path))
-        return files
+        return self.ftp.listdir(str(directory_path))
