@@ -128,3 +128,5 @@ dmypy.json
 /logs
 /cfg
 /release
+/_old
+/tests

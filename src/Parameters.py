@@ -25,4 +25,4 @@ class Parameters:
 
     def save_parameters(self, name):
 
-        EditingFile.rewrite_file(self.parameters_dict)
+        EditingFile.edit_file(self.parameters_dict)
