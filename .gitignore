@@ -128,5 +128,5 @@ dmypy.json
 /logs
 /cfg
 /release
-/_old
-/tests
+/_old/
+/tests/
