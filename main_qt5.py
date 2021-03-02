@@ -7,7 +7,6 @@ from UI import MyUI_Qt5
 import src
 
 
-@src.thread
 def main():
 
     control_unit = src.SettingsTools.AgrodroidBU(src.default_ssh_config)

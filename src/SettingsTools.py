@@ -83,10 +83,6 @@ class AgrodroidBU(src.terminal_session.TerminalSession):
     def mkdir(directory):
         return f'mkdir --mode=777 {directory}\n'
 
-    # @staticmethod
-    # def exist_file_checker(file_path):
-    #     pathlib.Path(file_path).exists()
-
     def get_id_value(self, ident):
         ids_path = src.bu_folders['ids_path']
         ident_path = pathlib.PurePosixPath(ids_path).joinpath(ident)
@@ -325,7 +321,7 @@ class AgrodroidBU(src.terminal_session.TerminalSession):
         self.install_worker(task.string_for_find)
         self.check_worker(task.string_for_find)
 
-    def use_autostart(self, task):
+    def use_autostart(self):
         self.execute_command(f'cd {src.bu_folders["current_version"]}\n')
         self.execute_command('./autostart.sh\n')
 
@@ -355,11 +351,12 @@ class AgrodroidBU(src.terminal_session.TerminalSession):
         commands = [
             f'sudo mount -v --uuid="{ssd_uuid_number}" '
             f'{src.bu_folders["ssd_mount_point"]}\n',
+            f'cd {src.bu_folders["media"]}\n'
             f'sudo chown -hR agrodroid:agrodroid '
-            f'{src.bu_folders["ssd_mount_point"].parent}\n',
+            f'{src.bu_folders["ssd_mount_point"].split("/")[-3]}\n',
             f'cd {src.bu_folders["ssd_mount_point"]}\n',
             AgrodroidBU.mkdir('logs data'),
-            f'cd {src.bu_folders["ssd_mount_point"].joinpath("data")}'
+            f'cd {src.bu_folders["ssd_mount_point"] + "data"}'
             f'\n',
             AgrodroidBU.mkdir('json images record'),
             f'cd {src.bu_folders["scripts_path"]}\n',

@@ -2,10 +2,10 @@ import logging
 import re
 import subprocess
 import time
-from datetime import datetime
-from functools import reduce
-
+import threading
+from functools import reduce, wraps
 import paramiko
+
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,6 @@ class TerminalSession(paramiko.SSHClient):
             return end_of_task
 
         def wait_answer(strings):
-            start_waiting = datetime.now()
             end = end_task(strings)
             while not end:
                 r = TerminalSession.receive(self.channel.recv(10e10))
@@ -156,8 +155,6 @@ class TerminalSession(paramiko.SSHClient):
                 strings.extend(recv)
                 if 'reboot' in command:
                     return strings
-            logger.info(f'Время исполнения команды: '
-                        f'{str(datetime.now() - start_waiting)}')
             return strings
 
         def have_password(strings):

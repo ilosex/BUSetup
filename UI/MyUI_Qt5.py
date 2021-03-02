@@ -143,7 +143,6 @@ class UI(QMainWindow):
             self.close()
 
     def connect_clicked(self):
-        # @src.thread
         def connect():
 
             if self.control_unit.connection_state != f'Connected to ' \
@@ -179,13 +178,7 @@ class UI(QMainWindow):
         #todo: выполнить проверку на выбор папки с прошивками
         self.connect_clicked()
         copypaths = set()
-        if self.number_field.isModified():
-            src.bu_ids_config['device_id'] = self.number_field.text()
-            src.YAMLOperator.YAMLFile(
-                src.bu_ids_config_path,
-                input_dict=src.bu_ids_config,
-                dict_name='default'). \
-                write_config_in_the_file()
+
 
         def copy_file(path, task):
             name = task.string_for_find
@@ -211,25 +204,45 @@ class UI(QMainWindow):
                                      f'файла {p.name}')
                     self.control_unit.copy_file_to_bu(p, destination_path)
 
-        # @src.thread
         def execute():
             if len(self.tasks) > 0:
                 start_time = datetime.now()
                 self.logger.warning(f'***** {self.number_field.text()}'
                                     ' выполнение заданий *****')
+                self.control_unit.get_ids()
+                [self.logger.warning(f'{k} = {v}')
+                 for k, v in src.bu_ids_config.items()]
+                self.tasks.sort()
+                if self.number_field.isModified():
+                    src.bu_ids_config['device_id'] = self.number_field.text()
+                    src.YAMLOperator.YAMLFile(
+                        src.bu_ids_config_path,
+                        input_dict=src.bu_ids_config,
+                        dict_name='default'). \
+                        write_config_in_the_file()
                 for task in self.tasks:
+                    start_task = datetime.now()
+                    self.logger.warning(f'***** Выполнение задания {task.name}'
+                                        f' начато в {start_task} *****')
                     if 'string_for_find' in task.__dict__:
                         copy_file(task.__dict__['file'], task)
                         task.execute_task(self.control_unit)
                     else:
                         task.execute_task(self.control_unit)
+                    self.logger.warning(f'##### Выполнение задания {task.name}'
+                                        f' закончено в {datetime.now()}. Время'
+                                        f' выполнения составило'
+                                        f' {datetime.now() - start_task} '
+                                        f'#####')
                 [self.control_unit.delete_file_on_bu(path.name, path.parent)
                  for path in copypaths]
                 delta_time = datetime.now() - start_time
-                self.logger.warning(f'***** {self.control_unit.get_number()}'
+                [self.logger.warning(f'{k} = {v}')
+                 for k, v in src.bu_ids_config.items()]
+                self.logger.warning(f'##### {self.control_unit.get_number()}'
                                     f' задания выполнены. Время выпонения: '
                                     f'{delta_time} '
-                                    f' *****')
+                                    f' #####')
                 return True
             else:
                 self.logger.error('Не выбрано ни одного задания!')

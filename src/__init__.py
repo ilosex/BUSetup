@@ -1,5 +1,4 @@
 import pathlib
-import threading
 from functools import wraps
 
 import src.MyLogger
@@ -16,18 +15,6 @@ CONFIGS_PATHS = {
     'SSHconfig': None,
     'TaskParameters': None
 }
-
-THREADS = []
-
-
-def thread(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        my_thread = threading.Thread(target=f, args=args[:-1], kwargs=kwargs)
-        my_thread.start()
-        src.THREADS.append(my_thread)
-        return my_thread
-    return wrapper
 
 
 def parse_path_by_name(resource_path, name):
